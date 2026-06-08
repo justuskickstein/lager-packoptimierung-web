@@ -1,0 +1,296 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+  <title>Lager Packoptimierung</title>
+
+  <link rel="stylesheet" href="style.css" />
+</head>
+
+<body>
+  <div class="app-background"></div>
+
+  <header class="hero">
+    <div>
+      <p class="eyebrow">Lageroptimierung · 3D Packing · Prototyp</p>
+      <h1>Lager Packoptimierung</h1>
+      <p class="hero-text">
+        Erstelle Aufträge, definiere Artikel und Boxen und berechne automatisch eine passende Packlösung.
+      </p>
+    </div>
+
+    <div class="hero-card">
+      <span class="status-dot"></span>
+      <div>
+        <p>Systemstatus</p>
+        <strong>Bereit für Auftrag</strong>
+      </div>
+    </div>
+  </header>
+
+  <main class="layout">
+
+    <!-- LINKER BEREICH -->
+    <section class="panel input-panel">
+
+      <div class="section-header">
+        <div>
+          <p class="eyebrow">Eingabe</p>
+          <h2>Auftrag erstellen</h2>
+        </div>
+
+        <button class="secondary-btn" id="loadExampleBtn">
+          Beispielauftrag laden
+        </button>
+      </div>
+
+      <!-- AUFTRAG -->
+      <div class="card">
+        <h3>Auftragsdaten</h3>
+
+        <div class="form-grid">
+          <label>
+            Auftragsnummer
+            <input type="text" id="orderNumber" placeholder="z. B. 1001" />
+          </label>
+
+          <label>
+            Kunde / Ziel
+            <input type="text" id="customerName" placeholder="z. B. IKEA Testkunde" />
+          </label>
+        </div>
+      </div>
+
+      <!-- ARTIKEL -->
+      <div class="card">
+        <div class="card-title-row">
+          <h3>Artikel hinzufügen</h3>
+          <span class="small-badge">Maße in cm</span>
+        </div>
+
+        <div class="form-grid">
+          <label>
+            Name
+            <input type="text" id="articleName" placeholder="z. B. Regalbrett" />
+          </label>
+
+          <label>
+            Länge
+            <input type="number" id="articleLength" placeholder="80" />
+          </label>
+
+          <label>
+            Breite
+            <input type="number" id="articleWidth" placeholder="30" />
+          </label>
+
+          <label>
+            Höhe
+            <input type="number" id="articleHeight" placeholder="2" />
+          </label>
+
+          <label>
+            Gewicht kg
+            <input type="number" id="articleWeight" placeholder="3" step="0.1" />
+          </label>
+
+          <label>
+            Menge
+            <input type="number" id="articleQuantity" placeholder="1" />
+          </label>
+        </div>
+
+        <div class="checkbox-row">
+          <label>
+            <input type="checkbox" id="articleFragile" />
+            zerbrechlich
+          </label>
+
+          <label>
+            <input type="checkbox" id="articleStackable" checked />
+            stapelbar
+          </label>
+
+          <label>
+            <input type="checkbox" id="articleRotatable" checked />
+            drehbar
+          </label>
+        </div>
+
+        <button class="primary-btn" id="addArticleBtn">
+          Artikel hinzufügen
+        </button>
+      </div>
+
+      <!-- ARTIKELLISTE -->
+      <div class="card">
+        <h3>Artikelliste</h3>
+
+        <div class="table-wrapper">
+          <table>
+            <thead>
+              <tr>
+                <th>Name</th>
+                <th>Maße</th>
+                <th>Gewicht</th>
+                <th>Menge</th>
+                <th>Info</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody id="articleTableBody">
+              <tr class="empty-row">
+                <td colspan="6">Noch keine Artikel hinzugefügt.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- BOXEN -->
+      <div class="card">
+        <div class="card-title-row">
+          <h3>Box-Typ hinzufügen</h3>
+          <span class="small-badge">Maße in cm</span>
+        </div>
+
+        <div class="form-grid">
+          <label>
+            Boxname
+            <input type="text" id="boxName" placeholder="z. B. Box M" />
+          </label>
+
+          <label>
+            Länge
+            <input type="number" id="boxLength" placeholder="100" />
+          </label>
+
+          <label>
+            Breite
+            <input type="number" id="boxWidth" placeholder="60" />
+          </label>
+
+          <label>
+            Höhe
+            <input type="number" id="boxHeight" placeholder="60" />
+          </label>
+
+          <label>
+            Max. Gewicht kg
+            <input type="number" id="boxMaxWeight" placeholder="30" step="0.1" />
+          </label>
+        </div>
+
+        <button class="primary-btn" id="addBoxBtn">
+          Box hinzufügen
+        </button>
+      </div>
+
+      <!-- BOXLISTE -->
+      <div class="card">
+        <h3>Verfügbare Boxen</h3>
+
+        <div class="table-wrapper">
+          <table>
+            <thead>
+              <tr>
+                <th>Name</th>
+                <th>Maße</th>
+                <th>Max. Gewicht</th>
+                <th>Volumen</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody id="boxTableBody">
+              <tr class="empty-row">
+                <td colspan="5">Noch keine Boxen hinzugefügt.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+    </section>
+
+    <!-- RECHTER BEREICH -->
+    <section class="panel result-panel">
+
+      <div class="section-header">
+        <div>
+          <p class="eyebrow">Berechnung</p>
+          <h2>Packlösung</h2>
+        </div>
+
+        <button class="run-btn" id="runAlgorithmBtn">
+          Algorithmus starten
+        </button>
+      </div>
+
+      <div class="summary-grid">
+        <div class="summary-card">
+          <p>Artikelarten</p>
+          <strong id="articleTypeCount">0</strong>
+        </div>
+
+        <div class="summary-card">
+          <p>Gesamtartikel</p>
+          <strong id="totalItemCount">0</strong>
+        </div>
+
+        <div class="summary-card">
+          <p>Box-Typen</p>
+          <strong id="boxTypeCount">0</strong>
+        </div>
+
+        <div class="summary-card">
+          <p>Benutzte Boxen</p>
+          <strong id="usedBoxCount">0</strong>
+        </div>
+      </div>
+
+      <div class="card result-card">
+        <h3>Ergebnisübersicht</h3>
+        <div id="resultOutput" class="result-output">
+          Noch keine Berechnung durchgeführt.
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-title-row">
+          <h3>3D-Modell</h3>
+          <span class="small-badge">kommt im nächsten Schritt</span>
+        </div>
+
+        <div class="viewer-toolbar">
+  <label>
+    Box auswählen
+    <select id="boxSelect">
+      <option value="">Noch keine Box berechnet</option>
+    </select>
+  </label>
+</div>
+
+<div id="viewer3d" class="viewer-3d">
+  <div class="viewer-empty">
+    <div class="cube-icon"></div>
+    <p>
+      Starte den Algorithmus, um die gepackte Box als 3D-Modell zu sehen.
+    </p>
+  </div>
+</div>
+      </div>
+
+    </section>
+
+  </main>
+
+  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+
+<script src="algorithm.js"></script>
+<script src="visualizer.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
