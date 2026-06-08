@@ -3,6 +3,11 @@ let camera = null;
 let renderer = null;
 let controls = null;
 let currentAnimationId = null;
+let raycaster = null;
+let mouse = null;
+let clickableMeshes = [];
+let selectedMesh = null;
+let selectedOriginalColor = null;
 
 function clearViewer() {
   const viewer = document.getElementById("viewer3d");
@@ -15,6 +20,10 @@ function clearViewer() {
     cancelAnimationFrame(currentAnimationId);
     currentAnimationId = null;
   }
+
+  clickableMeshes = [];
+  selectedMesh = null;
+  selectedOriginalColor = null;
 
   viewer.innerHTML = "";
 }
@@ -36,7 +45,7 @@ function showViewerEmptyMessage(message) {
   `;
 }
 
-function renderPackedBox3D(usedBox) {
+function renderPackedBox3D(usedBox, visibleStep = null, onItemClick = null) {
   const viewer = document.getElementById("viewer3d");
 
   if (!viewer || !usedBox) {
@@ -75,9 +84,21 @@ function renderPackedBox3D(usedBox) {
 
   viewer.appendChild(renderer.domElement);
 
-  controls = new THREE.OrbitControls(camera, renderer.domElement);
-  controls.enableDamping = true;
-  controls.dampingFactor = 0.08;
+  if (THREE.OrbitControls) {
+    controls = new THREE.OrbitControls(camera, renderer.domElement);
+    controls.enableDamping = true;
+    controls.dampingFactor = 0.08;
+  } else {
+    controls = null;
+    console.warn("OrbitControls wurde nicht geladen.");
+  }
+
+  raycaster = new THREE.Raycaster();
+  mouse = new THREE.Vector2();
+
+  renderer.domElement.addEventListener("click", function (event) {
+    handleViewerClick(event, viewer, onItemClick);
+  });
 
   const ambientLight = new THREE.AmbientLight(0xffffff, 0.72);
   scene.add(ambientLight);
@@ -87,20 +108,24 @@ function renderPackedBox3D(usedBox) {
   scene.add(directionalLight);
 
   addBoxFrame(usedBox.boxType);
-  addPackedItems(usedBox);
+  addPackedItems(usedBox, visibleStep);
   addGroundGrid(maxDimension);
 
-  controls.target.set(
+  controls?.target.set(
     usedBox.boxType.length / 2,
     usedBox.boxType.height / 2,
     usedBox.boxType.width / 2
   );
 
-  controls.update();
+  controls?.update();
 
   function animate() {
     currentAnimationId = requestAnimationFrame(animate);
-    controls.update();
+
+    if (controls) {
+      controls.update();
+    }
+
     renderer.render(scene, camera);
   }
 
@@ -144,15 +169,23 @@ function addBoxFrame(boxType) {
   scene.add(transparentBox);
 }
 
-function addPackedItems(usedBox) {
-  usedBox.items.forEach((item, index) => {
+function addPackedItems(usedBox, visibleStep) {
+  const itemsToShow = usedBox.items.filter((item) => {
+    if (visibleStep === null || visibleStep === undefined) {
+      return true;
+    }
+
+    return (item.packStep || 1) <= visibleStep;
+  });
+
+  itemsToShow.forEach((item, index) => {
     const geometry = new THREE.BoxGeometry(
       item.length,
       item.height,
       item.width
     );
 
-    const color = getItemColor(index);
+    const color = getItemColor(item.packStep || index);
 
     const material = new THREE.MeshStandardMaterial({
       color,
@@ -168,6 +201,10 @@ function addPackedItems(usedBox) {
       item.y + item.width / 2
     );
 
+    mesh.userData.item = item;
+    mesh.userData.originalColor = color;
+
+    clickableMeshes.push(mesh);
     scene.add(mesh);
 
     const edges = new THREE.EdgesGeometry(geometry);
@@ -182,7 +219,84 @@ function addPackedItems(usedBox) {
     edgeLines.position.copy(mesh.position);
 
     scene.add(edgeLines);
+
+    addStepNumberLabel(item, mesh.position);
   });
+}
+
+function addStepNumberLabel(item, position) {
+  const canvas = document.createElement("canvas");
+  canvas.width = 128;
+  canvas.height = 64;
+
+  const context = canvas.getContext("2d");
+
+  context.fillStyle = "rgba(7, 11, 22, 0.85)";
+  context.roundRect(8, 8, 112, 48, 18);
+  context.fill();
+
+  context.fillStyle = "white";
+  context.font = "bold 30px Arial";
+  context.textAlign = "center";
+  context.textBaseline = "middle";
+  context.fillText(String(item.packStep || "?"), 64, 33);
+
+  const texture = new THREE.CanvasTexture(canvas);
+
+  const material = new THREE.SpriteMaterial({
+    map: texture,
+    transparent: true
+  });
+
+  const sprite = new THREE.Sprite(material);
+  sprite.scale.set(18, 9, 1);
+
+  sprite.position.set(
+    position.x,
+    position.y + item.height / 2 + 5,
+    position.z
+  );
+
+  scene.add(sprite);
+}
+
+function handleViewerClick(event, viewer, onItemClick) {
+  if (!raycaster || !mouse || !camera) {
+    return;
+  }
+
+  const rect = viewer.getBoundingClientRect();
+
+  mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+  mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+
+  raycaster.setFromCamera(mouse, camera);
+
+  const intersects = raycaster.intersectObjects(clickableMeshes);
+
+  if (intersects.length === 0) {
+    return;
+  }
+
+  const clickedMesh = intersects[0].object;
+  const item = clickedMesh.userData.item;
+
+  highlightSelectedMesh(clickedMesh);
+
+  if (onItemClick) {
+    onItemClick(item);
+  }
+}
+
+function highlightSelectedMesh(mesh) {
+  if (selectedMesh && selectedOriginalColor !== null) {
+    selectedMesh.material.color.setHex(selectedOriginalColor);
+  }
+
+  selectedMesh = mesh;
+  selectedOriginalColor = mesh.userData.originalColor;
+
+  mesh.material.color.setHex(0xffffff);
 }
 
 function addGroundGrid(maxDimension) {

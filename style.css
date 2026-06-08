@@ -490,3 +490,96 @@ select option {
   transform: translate(-50%, -50%);
   white-space: nowrap;
 }
+
+.viewer-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  gap: 14px;
+  margin-bottom: 12px;
+}
+
+.step-controls {
+  display: flex;
+  gap: 10px;
+}
+
+.step-controls .secondary-btn {
+  min-width: 95px;
+}
+
+.step-status {
+  margin-bottom: 12px;
+  padding: 10px 12px;
+  border-radius: 14px;
+  background: rgba(108, 124, 255, 0.12);
+  border: 1px solid rgba(108, 124, 255, 0.24);
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.item-info-panel {
+  margin-top: 14px;
+  padding: 16px;
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.055);
+  border: 1px solid rgba(255, 255, 255, 0.11);
+}
+
+.item-info-panel h4 {
+  margin: 0 0 10px;
+  font-size: 16px;
+}
+
+.item-info-panel p {
+  margin: 5px 0;
+  color: var(--muted);
+  line-height: 1.5;
+}
+
+.item-info-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.item-info-field {
+  padding: 10px;
+  border-radius: 12px;
+  background: rgba(255,255,255,0.055);
+}
+
+.item-info-field span {
+  display: block;
+  color: var(--muted);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  margin-bottom: 4px;
+}
+
+.item-info-field strong {
+  color: var(--text);
+  font-size: 14px;
+}
+
+@media (max-width: 720px) {
+  .viewer-toolbar {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .step-controls {
+    width: 100%;
+  }
+
+  .step-controls .secondary-btn {
+    width: 100%;
+  }
+
+  .item-info-grid {
+    grid-template-columns: 1fr;
+  }
+}

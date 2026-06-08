@@ -215,6 +215,7 @@ function runPackingAlgorithm(articles, boxes) {
 
   const usedBoxes = [];
   const unpackedItems = [];
+  let globalPackStep = 1;
 
   sortedItems.forEach((item) => {
     let placed = false;
@@ -233,10 +234,15 @@ function runPackingAlgorithm(articles, boxes) {
       const placedItem = findPlacement(item, usedBox);
 
       if (placedItem) {
-        usedBox.items.push(placedItem);
-        placed = true;
-        break;
-      }
+  usedBox.items.push({
+    ...placedItem,
+    packStep: globalPackStep
+  });
+
+  globalPackStep++;
+  placed = true;
+  break;
+}
     }
 
     if (placed) {
@@ -262,7 +268,14 @@ function runPackingAlgorithm(articles, boxes) {
       unpackedItems.push(item);
       return;
     }
+newBox.items = newBox.items.map((placedItem) => {
+  return {
+    ...placedItem,
+    packStep: globalPackStep
+  };
+});
 
+globalPackStep++;
     usedBoxes.push(newBox);
   });
 

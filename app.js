@@ -1,6 +1,8 @@
 let articles = [];
 let boxes = [];
 let latestSolution = null;
+let currentBoxIndex = 0;
+let currentPackStep = null;
 
 const orderNumberInput = document.getElementById("orderNumber");
 const customerNameInput = document.getElementById("customerName");
@@ -35,12 +37,18 @@ const totalItemCount = document.getElementById("totalItemCount");
 const boxTypeCount = document.getElementById("boxTypeCount");
 const usedBoxCount = document.getElementById("usedBoxCount");
 const boxSelect = document.getElementById("boxSelect");
+const prevStepBtn = document.getElementById("prevStepBtn");
+const nextStepBtn = document.getElementById("nextStepBtn");
+const stepStatusText = document.getElementById("stepStatusText");
+const itemInfoPanel = document.getElementById("itemInfoPanel");
 
 addArticleBtn.addEventListener("click", addArticle);
 addBoxBtn.addEventListener("click", addBox);
 loadExampleBtn.addEventListener("click", loadExampleOrder);
 runAlgorithmBtn.addEventListener("click", calculateSolution);
 boxSelect.addEventListener("change", handleBoxSelectionChange);
+prevStepBtn.addEventListener("click", goToPreviousPackStep);
+nextStepBtn.addEventListener("click", goToNextPackStep);
 
 function addArticle() {
   const article = {
@@ -467,11 +475,18 @@ function renderBoxSelect(solution) {
 function renderFirstBoxInViewer(solution) {
   if (!solution || solution.usedBoxes.length === 0) {
     showViewerEmptyMessage("Es gibt keine berechnete Box für die 3D-Ansicht.");
+    stepStatusText.textContent = "Keine Packreihenfolge vorhanden.";
     return;
   }
 
+  currentBoxIndex = 0;
   boxSelect.value = "0";
-  renderPackedBox3D(solution.usedBoxes[0]);
+
+  const selectedBox = solution.usedBoxes[0];
+  currentPackStep = getMaxStepForBox(selectedBox);
+
+  updateStepStatus(selectedBox);
+  renderPackedBox3D(selectedBox, currentPackStep, handleItemClick);
 }
 
 function handleBoxSelectionChange() {
@@ -491,13 +506,147 @@ function handleBoxSelectionChange() {
     return;
   }
 
-  renderPackedBox3D(selectedBox);
+  currentBoxIndex = selectedIndex;
+  currentPackStep = getMaxStepForBox(selectedBox);
+
+  updateStepStatus(selectedBox);
+  renderPackedBox3D(selectedBox, currentPackStep, handleItemClick);
+  resetItemInfoPanel();
 }
 
 function resetViewerAfterDataChange() {
+  currentBoxIndex = 0;
+  currentPackStep = null;
+
   renderBoxSelect(null);
   showViewerEmptyMessage("Daten wurden geändert. Starte den Algorithmus erneut.");
+
+  stepStatusText.textContent = "Daten wurden geändert. Bitte Algorithmus erneut starten.";
+  resetItemInfoPanel();
 }
+
+function getSelectedBox() {
+  if (!latestSolution) {
+    return null;
+  }
+
+  return latestSolution.usedBoxes[currentBoxIndex] || null;
+}
+
+function getMinStepForBox(usedBox) {
+  if (!usedBox || usedBox.items.length === 0) {
+    return 0;
+  }
+
+  return Math.min(...usedBox.items.map((item) => item.packStep || 1));
+}
+
+function getMaxStepForBox(usedBox) {
+  if (!usedBox || usedBox.items.length === 0) {
+    return 0;
+  }
+
+  return Math.max(...usedBox.items.map((item) => item.packStep || 1));
+}
+
+function goToPreviousPackStep() {
+  const selectedBox = getSelectedBox();
+
+  if (!selectedBox) {
+    return;
+  }
+
+  const minStep = getMinStepForBox(selectedBox);
+
+  if (currentPackStep > minStep) {
+    currentPackStep--;
+    updateStepStatus(selectedBox);
+    renderPackedBox3D(selectedBox, currentPackStep, handleItemClick);
+    resetItemInfoPanel();
+  }
+}
+
+function goToNextPackStep() {
+  const selectedBox = getSelectedBox();
+
+  if (!selectedBox) {
+    return;
+  }
+
+  const maxStep = getMaxStepForBox(selectedBox);
+
+  if (currentPackStep < maxStep) {
+    currentPackStep++;
+    updateStepStatus(selectedBox);
+    renderPackedBox3D(selectedBox, currentPackStep, handleItemClick);
+    resetItemInfoPanel();
+  }
+}
+
+function updateStepStatus(usedBox) {
+  if (!usedBox || usedBox.items.length === 0) {
+    stepStatusText.textContent = "Keine Artikel in dieser Box.";
+    return;
+  }
+
+  const visibleItems = usedBox.items.filter((item) => {
+    return (item.packStep || 1) <= currentPackStep;
+  });
+
+  const maxStep = getMaxStepForBox(usedBox);
+
+  stepStatusText.textContent =
+    `Packschritt ${currentPackStep} von ${maxStep} · ` +
+    `${visibleItems.length} von ${usedBox.items.length} Artikeln sichtbar`;
+}
+
+function handleItemClick(item) {
+  if (!itemInfoPanel || !item) {
+    return;
+  }
+
+  itemInfoPanel.innerHTML = `
+    <h4>${item.singleName}</h4>
+    <p>Dieser Artikel wurde im Packschritt ${item.packStep} platziert.</p>
+
+    <div class="item-info-grid">
+      <div class="item-info-field">
+        <span>Maße</span>
+        <strong>${item.length} × ${item.width} × ${item.height} cm</strong>
+      </div>
+
+      <div class="item-info-field">
+        <span>Gewicht</span>
+        <strong>${item.weight} kg</strong>
+      </div>
+
+      <div class="item-info-field">
+        <span>Position</span>
+        <strong>x=${item.x}, y=${item.y}, z=${item.z}</strong>
+      </div>
+
+      <div class="item-info-field">
+        <span>Eigenschaften</span>
+        <strong>
+          ${item.fragile ? "zerbrechlich" : "nicht zerbrechlich"},
+          ${item.stackable ? "stapelbar" : "nicht stapelbar"}
+        </strong>
+      </div>
+    </div>
+  `;
+}
+
+function resetItemInfoPanel() {
+  if (!itemInfoPanel) {
+    return;
+  }
+
+  itemInfoPanel.innerHTML = `
+    <h4>Artikeldetails</h4>
+    <p>Klicke im 3D-Modell auf einen Artikel, um Details zu sehen.</p>
+  `;
+}
+
 renderArticles();
 renderBoxes();
 updateSummary();
