@@ -853,3 +853,80 @@ body {
   background: rgba(255, 255, 255, 0.06);
   border: 1px solid rgba(255, 255, 255, 0.12);
 }
+.hero-section .hero-content h1 {
+  font-size: clamp(3.2rem, 5.8vw, 5.8rem);
+  line-height: 1.05;
+  letter-spacing: -0.035em;
+  word-spacing: 0.06em;
+  max-width: 850px;
+}
+.hero-section .hero-card {
+  display: block;
+  max-width: 520px;
+  padding: 36px;
+}
+
+.hero-section .hero-card h3 {
+  font-size: 2.1rem;
+  line-height: 1.1;
+  margin: 18px 0 14px;
+  max-width: 360px;
+}
+
+.hero-section .hero-card p {
+  max-width: 430px;
+  font-size: 1rem;
+  line-height: 1.65;
+}
+
+.hero-section .stats-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+  margin-top: 28px;
+}
+
+.hero-section .stats-grid div {
+  min-width: 0;
+  text-align: center;
+}
+/* Verbesserungen für die erste Projektseite */
+
+.hero-section .hero-content h1 {
+  font-size: clamp(3.2rem, 5.8vw, 5.8rem);
+  line-height: 1.05;
+  letter-spacing: -0.035em;
+  word-spacing: 0.06em;
+  max-width: 850px;
+}
+
+.hero-section .hero-card {
+  display: block;
+  max-width: 520px;
+  padding: 36px;
+}
+
+.hero-section .hero-card h3 {
+  font-size: 2.1rem;
+  line-height: 1.1;
+  margin: 18px 0 14px;
+  max-width: 360px;
+}
+
+.hero-section .hero-card p {
+  max-width: 430px;
+  font-size: 1rem;
+  line-height: 1.65;
+}
+
+.hero-section .stats-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+  margin-top: 28px;
+}
+
+.hero-section .stats-grid div {
+  min-width: 0;
+  text-align: center;
+}
