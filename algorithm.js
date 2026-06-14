@@ -7,6 +7,8 @@
 // - flache Orientierung bei kippgefährdeten Artikeln
 // - Packschritte für 3D-Visualisierung
 // ============================================================
+const ALGORITHM_VERSION = "SMART_3D_STABILITY_V2";
+console.log("Aktiver Algorithmus:", ALGORITHM_VERSION);
 
 const EPS = 0.0001;
 
@@ -793,5 +795,8 @@ function runPackingAlgorithm(articles, boxes) {
     unpackedItems: bestSolution.unpackedItems
   };
 
-  return recalculated;
+ return {
+  ...recalculated,
+  algorithmVersion: ALGORITHM_VERSION
+};
 }

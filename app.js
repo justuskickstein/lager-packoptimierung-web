@@ -277,6 +277,11 @@ function renderResult(solution) {
   }
 
   let html = "";
+  html += `
+  <p class="small-badge">
+    Algorithmus-Version: ${solution.algorithmVersion || "unbekannt / alte Version"}
+  </p>
+`;
 
   if (solution.usedBoxes.length === 0) {
     html += `
