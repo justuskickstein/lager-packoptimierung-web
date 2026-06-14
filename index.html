@@ -10,6 +10,136 @@
 </head>
 
 <body>
+  <section class="hero-section">
+  <div class="hero-content">
+    <p class="eyebrow">Lageroptimierung · Packalgorithmus · 3D-Visualisierung</p>
+
+    <h1>Intelligenter packen. Weniger Zeit verlieren.</h1>
+
+    <p class="hero-text">
+      In vielen Lagerprozessen kostet das Packen unnötig viel Zeit: Mitarbeitende müssen passende Kartons auswählen,
+      Artikel einschätzen und dabei gleichzeitig Platz, Stabilität und Übersicht behalten. Dieses Projekt zeigt,
+      wie ein Algorithmus diesen Prozess digital unterstützen kann.
+    </p>
+
+    <div class="hero-buttons">
+      <a href="#projekt" class="primary-button">Projekt verstehen</a>
+      <a href="#algorithmus" class="secondary-button">Algorithmus testen</a>
+    </div>
+  </div>
+
+  <div class="hero-card">
+    <div class="mini-label">Live-Prototyp</div>
+    <h3>3D-Packoptimierung</h3>
+    <p>Artikel werden analysiert, gedreht, sortiert und möglichst effizient auf passende Boxen verteilt.</p>
+
+    <div class="stats-grid">
+      <div>
+        <strong>1</strong>
+        <span>Auftrag</span>
+      </div>
+      <div>
+        <strong>n</strong>
+        <span>Artikel</span>
+      </div>
+      <div>
+        <strong>3D</strong>
+        <span>Boxmodell</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="projekt" class="info-section">
+  <div class="section-heading">
+    <p class="eyebrow">Das Problem</p>
+    <h2>Warum Packen im Lager oft komplizierter ist, als es aussieht</h2>
+  </div>
+
+  <div class="problem-grid">
+    <div class="info-card">
+      <h3>Viele Entscheidungen</h3>
+      <p>
+        Für jeden Auftrag muss entschieden werden, welche Box passt, wie die Artikel gedreht werden und welche Kombination
+        möglichst wenig Platz verschwendet.
+      </p>
+    </div>
+
+    <div class="info-card">
+      <h3>Zeitverlust im Alltag</h3>
+      <p>
+        Gerade bei unterschiedlichen Artikelgrößen verlieren Mitarbeitende Zeit durch Ausprobieren, Umräumen oder die Wahl
+        einer zu großen beziehungsweise zu kleinen Verpackung.
+      </p>
+    </div>
+
+    <div class="info-card">
+      <h3>Fehler beim Packen</h3>
+      <p>
+        Wenn Artikel ungünstig stehen, instabil liegen oder unnötig auf mehrere Boxen verteilt werden, entstehen höhere
+        Kosten und mehr Aufwand.
+      </p>
+    </div>
+  </div>
+</section>
+
+<section class="solution-section">
+  <div class="solution-text">
+    <p class="eyebrow">Die Idee</p>
+    <h2>Der Algorithmus denkt den Packprozess vor</h2>
+    <p>
+      Der Prototyp berechnet automatisch, welche Artikel in welche Box passen. Dabei werden Maße, Drehbarkeit,
+      Stabilität und die Anzahl der benötigten Boxen berücksichtigt. Ziel ist nicht nur irgendeine Lösung,
+      sondern eine möglichst sinnvolle Packstrategie.
+    </p>
+  </div>
+
+  <div class="steps">
+    <div class="step">
+      <span>01</span>
+      <div>
+        <h3>Artikel analysieren</h3>
+        <p>Der Algorithmus liest Länge, Breite, Höhe und besondere Regeln der Artikel ein.</p>
+      </div>
+    </div>
+
+    <div class="step">
+      <span>02</span>
+      <div>
+        <h3>Orientierungen prüfen</h3>
+        <p>Artikel werden nur so gedreht, wie es sinnvoll und erlaubt ist.</p>
+      </div>
+    </div>
+
+    <div class="step">
+      <span>03</span>
+      <div>
+        <h3>Boxen bewerten</h3>
+        <p>Verschiedene Kartongrößen werden getestet, um möglichst wenige und passende Boxen zu verwenden.</p>
+      </div>
+    </div>
+
+    <div class="step">
+      <span>04</span>
+      <div>
+        <h3>3D-Ergebnis anzeigen</h3>
+        <p>Die berechnete Lösung wird visuell dargestellt, damit man sofort versteht, wie gepackt wird.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="algorithm-preview">
+  <p class="eyebrow">Der Nutzen</p>
+  <h2>Aus Erfahrung wird ein digitaler Entscheidungsprozess</h2>
+  <p>
+    Statt jede Packentscheidung manuell zu treffen, liefert der Prototyp eine nachvollziehbare Empfehlung.
+    Dadurch wird der Prozess schneller, einheitlicher und leichter erklärbar.
+  </p>
+
+  <a href="#algorithmus" class="primary-button">Zum Algorithmus</a>
+</section>
+
   <div class="app-background"></div>
 
   <header class="hero">
@@ -30,7 +160,7 @@
     </div>
   </header>
 
-  <main class="layout">
+  <main id="algorithmus" class="layout app-section">
 
     <!-- LINKER BEREICH -->
     <section class="panel input-panel">
