@@ -1,40 +1,39 @@
 // ============================================================
-// SMART 3D PACKING ALGORITHM V2
-// Ziel:
+// EXTREME SMART 3D PACKING ALGORITHM V3
+// Fokus:
 // - möglichst wenige Boxen
-// - stabile Packung
-// - keine unrealistischen Mini-Auflagen
-// - flache Orientierung bei kippgefährdeten Artikeln
-// - Packschritte für 3D-Visualisierung
+// - realistische stabile Packung
+// - lange/schmale Artikel niemals senkrecht
+// - lieber eine große Box als mehrere kleine Boxen
+// - kompatibel mit 3D-Viewer: x, y, z, packStep
 // ============================================================
-const ALGORITHM_VERSION = "SMART_3D_STABILITY_V2";
+
+const ALGORITHM_VERSION = "EXTREME_SMART_3D_STABILITY_V3";
 console.log("Aktiver Algorithmus:", ALGORITHM_VERSION);
 
 const EPS = 0.0001;
 
-const PACKING_RULES = {
-  // Mindestauflage: Ein Artikel auf anderen Artikeln muss mindestens
-  // diesen Anteil seiner Grundfläche unterstützt bekommen.
-  minSupportRatio: 0.72,
+const RULES = {
+  minSupportRatio: 0.76,
+  heavySupportRatio: 0.86,
+  heavyKg: 8,
 
-  // Für schwere Artikel noch strenger.
-  heavyItemSupportRatio: 0.82,
+  // Wenn ein Objekt lang und schmal ist, darf die längste Seite NICHT Höhe sein.
+  longThinRatio: 2.15,
 
-  // Ab diesem Gewicht gilt ein Artikel als schwer.
-  heavyItemKg: 8,
+  // Wenn die Grundfläche sehr klein ist, wird die Orientierung verboten.
+  minFlatBaseFactorForLongThin: 0.78,
 
-  // Wenn ein Artikel sehr hoch und schmal steht, gilt er als kippgefährdet.
-  maxHeightToBaseRatio: 1.65,
+  // Kandidatenlimit pro Box, damit Browser nicht abstürzt.
+  maxCandidatePositions: 4500,
 
-  // Sehr kleine Auflageflächen bei hohen Artikeln werden vermieden.
-  minBaseAreaFactorForTallItems: 0.42,
-
-  // Zerbrechliche Artikel sollen möglichst nicht als tragende Basis dienen.
-  avoidStackingOnFragile: true,
-
-  // Zeit-/Kandidatenlimit, damit die Website nicht endlos rechnet.
-  maxCandidatePositions: 2500
+  // Je mehr Strategien, desto besser, aber langsamer.
+  maxStrategies: 10
 };
+
+// ============================================================
+// BASIC HELPERS
+// ============================================================
 
 function getVolume(item) {
   return item.length * item.width * item.height;
@@ -44,11 +43,20 @@ function getBaseArea(item) {
   return item.length * item.width;
 }
 
-function getFootprintCenter(item) {
-  return {
-    x: item.x + item.length / 2,
-    y: item.y + item.width / 2
-  };
+function getMaxDim(item) {
+  return Math.max(item.length, item.width, item.height);
+}
+
+function getMinDim(item) {
+  return Math.min(item.length, item.width, item.height);
+}
+
+function roundNum(value) {
+  return Math.round(value * 10000) / 10000;
+}
+
+function clone(obj) {
+  return JSON.parse(JSON.stringify(obj));
 }
 
 function expandArticles(articles) {
@@ -68,7 +76,7 @@ function expandArticles(articles) {
 }
 
 // ============================================================
-// ORIENTIERUNGEN
+// ORIENTATION LOGIC
 // ============================================================
 
 function getAllOrientations(item) {
@@ -116,65 +124,77 @@ function getAllOrientations(item) {
   return unique;
 }
 
-function isTallAndUnstableOrientation(orientation, originalItem) {
-  const baseMax = Math.max(orientation.length, orientation.width);
-  const baseMin = Math.min(orientation.length, orientation.width);
-  const height = orientation.height;
+function isLongThinItem(item) {
+  const dims = [item.length, item.width, item.height].sort((a, b) => a - b);
 
-  const sortedOriginalDims = [
-    originalItem.length,
-    originalItem.width,
-    originalItem.height
-  ].sort((a, b) => a - b);
+  const small = dims[0];
+  const medium = dims[1];
+  const large = dims[2];
 
-  const originalSmall = sortedOriginalDims[0];
-  const originalMedium = sortedOriginalDims[1];
-  const originalLarge = sortedOriginalDims[2];
-
-  const originalIsLongThin =
-    originalLarge >= originalMedium * 2.2 &&
-    originalMedium <= originalLarge * 0.45;
-
-  const heightToBaseRatio = height / Math.max(baseMax, EPS);
-
-  const baseArea = orientation.length * orientation.width;
-  const largestPossibleBaseArea = originalLarge * originalMedium;
-
-  const baseTooSmall =
-    baseArea < largestPossibleBaseArea * PACKING_RULES.minBaseAreaFactorForTallItems;
-
-  const clearlyStandingTall =
-    heightToBaseRatio > PACKING_RULES.maxHeightToBaseRatio ||
-    (height === originalLarge && baseMin === originalSmall);
-
-  return originalIsLongThin && clearlyStandingTall && baseTooSmall;
+  return (
+    large >= medium * RULES.longThinRatio &&
+    medium <= large * 0.55 &&
+    small <= large * 0.35
+  );
 }
 
-function getStableOrientations(item) {
-  const orientations = getAllOrientations(item);
+function isForbiddenStandingOrientation(item, orientation) {
+  if (!isLongThinItem(item)) {
+    return false;
+  }
 
-  const stable = orientations.filter((orientation) => {
-    return !isTallAndUnstableOrientation(orientation, item);
+  const originalDims = [item.length, item.width, item.height].sort((a, b) => a - b);
+
+  const originalSmall = originalDims[0];
+  const originalMedium = originalDims[1];
+  const originalLarge = originalDims[2];
+
+  const largestSideIsHeight =
+    Math.abs(orientation.height - originalLarge) < EPS;
+
+  const bestFlatBaseArea = originalLarge * originalMedium;
+  const currentBaseArea = orientation.length * orientation.width;
+
+  const baseTooSmall =
+    currentBaseArea < bestFlatBaseArea * RULES.minFlatBaseFactorForLongThin;
+
+  const standingOnSmallFace =
+    Math.min(orientation.length, orientation.width) <= originalSmall + EPS &&
+    Math.max(orientation.length, orientation.width) <= originalMedium + EPS;
+
+  return largestSideIsHeight && (baseTooSmall || standingOnSmallFace);
+}
+
+function getAllowedOrientations(item) {
+  const all = getAllOrientations(item);
+
+  let allowed = all.filter((orientation) => {
+    return !isForbiddenStandingOrientation(item, orientation);
   });
 
-  const usable = stable.length > 0 ? stable : orientations;
+  if (allowed.length === 0) {
+    allowed = all;
+  }
 
-  usable.sort((a, b) => {
-    // flachere Orientierung bevorzugen
+  allowed.sort((a, b) => {
+    // 1. flache Orientierung bevorzugen
     if (a.height !== b.height) return a.height - b.height;
 
-    // größere Grundfläche bevorzugen
+    // 2. große Grundfläche bevorzugen
     const baseA = a.length * a.width;
     const baseB = b.length * b.width;
 
-    return baseB - baseA;
+    if (baseA !== baseB) return baseB - baseA;
+
+    // 3. längere Seite nach Länge bevorzugen
+    return b.length - a.length;
   });
 
-  return usable;
+  return allowed;
 }
 
 // ============================================================
-// GEOMETRIE
+// GEOMETRY
 // ============================================================
 
 function boxesOverlap(a, b) {
@@ -185,14 +205,14 @@ function boxesOverlap(a, b) {
   return overlapX && overlapY && overlapZ;
 }
 
-function isInsideBox(item, boxType) {
+function isInsideBox(item, box) {
   return (
     item.x >= -EPS &&
     item.y >= -EPS &&
     item.z >= -EPS &&
-    item.x + item.length <= boxType.length + EPS &&
-    item.y + item.width <= boxType.width + EPS &&
-    item.z + item.height <= boxType.height + EPS
+    item.x + item.length <= box.length + EPS &&
+    item.y + item.width <= box.width + EPS &&
+    item.z + item.height <= box.height + EPS
   );
 }
 
@@ -210,6 +230,13 @@ function rectangleOverlapArea(a, b) {
   return xOverlap * yOverlap;
 }
 
+function getCenterPoint(item) {
+  return {
+    x: item.x + item.length / 2,
+    y: item.y + item.width / 2
+  };
+}
+
 function pointInsideFootprint(point, item) {
   return (
     point.x >= item.x - EPS &&
@@ -220,52 +247,49 @@ function pointInsideFootprint(point, item) {
 }
 
 // ============================================================
-// STABILITÄT
+// SUPPORT / STABILITY
 // ============================================================
 
-function getSupportingItems(positionedItem, placedItems) {
-  if (positionedItem.z <= EPS) {
+function getSupportItems(item, placedItems) {
+  if (item.z <= EPS) {
     return [];
   }
 
-  return placedItems.filter((placedItem) => {
-    const topZ = placedItem.z + placedItem.height;
-    return Math.abs(topZ - positionedItem.z) < EPS;
+  return placedItems.filter((placed) => {
+    const topZ = placed.z + placed.height;
+    return Math.abs(topZ - item.z) < EPS;
   });
 }
 
-function calculateSupport(positionedItem, placedItems) {
-  if (positionedItem.z <= EPS) {
+function calculateSupport(item, placedItems) {
+  if (item.z <= EPS) {
     return {
       supported: true,
       supportRatio: 1,
       centerSupported: true,
-      supportingItems: []
+      supportItems: []
     };
   }
 
-  const supportingItems = getSupportingItems(positionedItem, placedItems);
-
-  const footprintArea = positionedItem.length * positionedItem.width;
+  const supportItems = getSupportItems(item, placedItems);
 
   let supportArea = 0;
 
-  supportingItems.forEach((supportItem) => {
-    supportArea += rectangleOverlapArea(positionedItem, supportItem);
+  supportItems.forEach((support) => {
+    supportArea += rectangleOverlapArea(item, support);
   });
 
+  const footprintArea = item.length * item.width;
   const supportRatio = supportArea / Math.max(footprintArea, EPS);
 
-  const center = getFootprintCenter(positionedItem);
+  const center = getCenterPoint(item);
 
-  const centerSupported = supportingItems.some((supportItem) => {
-    return pointInsideFootprint(center, supportItem);
+  const centerSupported = supportItems.some((support) => {
+    return pointInsideFootprint(center, support);
   });
 
   const requiredSupport =
-    positionedItem.weight >= PACKING_RULES.heavyItemKg
-      ? PACKING_RULES.heavyItemSupportRatio
-      : PACKING_RULES.minSupportRatio;
+    item.weight >= RULES.heavyKg ? RULES.heavySupportRatio : RULES.minSupportRatio;
 
   const supported =
     supportRatio >= requiredSupport &&
@@ -275,78 +299,87 @@ function calculateSupport(positionedItem, placedItems) {
     supported,
     supportRatio,
     centerSupported,
-    supportingItems
+    supportItems
   };
 }
 
-function canBeStackedOn(positionedItem, supportInfo) {
-  if (positionedItem.z <= EPS) {
+function canStackOnSupports(item, supportInfo) {
+  if (item.z <= EPS) {
     return true;
   }
 
-  for (const supportItem of supportInfo.supportingItems) {
-    if (!supportItem.stackable) {
+  for (const support of supportInfo.supportItems) {
+    if (!support.stackable) {
       return false;
     }
 
-    if (PACKING_RULES.avoidStackingOnFragile && supportItem.fragile) {
-      // leichte Artikel dürfen auf zerbrechlichen Artikeln eventuell liegen,
-      // schwere aber nicht.
-      if (positionedItem.weight > 1.5) {
-        return false;
-      }
+    if (support.fragile && item.weight > 1.2) {
+      return false;
     }
   }
 
   return true;
 }
 
-function hasNoCollision(positionedItem, placedItems) {
-  return !placedItems.some((placedItem) => {
-    return boxesOverlap(positionedItem, placedItem);
-  });
+function hasCollision(item, placedItems) {
+  return placedItems.some((placed) => boxesOverlap(item, placed));
 }
 
-function canPlaceItem(positionedItem, usedBox) {
-  if (!isInsideBox(positionedItem, usedBox.boxType)) {
+function checkPlacement(item, usedBox) {
+  if (!isInsideBox(item, usedBox.boxType)) {
     return {
       ok: false,
       reason: "outside_box"
     };
   }
 
-  if (!hasNoCollision(positionedItem, usedBox.items)) {
+  if (hasCollision(item, usedBox.items)) {
     return {
       ok: false,
       reason: "collision"
     };
   }
 
-  const supportInfo = calculateSupport(positionedItem, usedBox.items);
+  const support = calculateSupport(item, usedBox.items);
 
-  if (!supportInfo.supported) {
+  if (!support.supported) {
     return {
       ok: false,
       reason: "not_enough_support"
     };
   }
 
-  if (!canBeStackedOn(positionedItem, supportInfo)) {
+  if (!canStackOnSupports(item, support)) {
     return {
       ok: false,
-      reason: "bad_stack_support"
+      reason: "bad_support_item"
     };
   }
 
   return {
     ok: true,
-    supportInfo
+    support
   };
 }
 
 // ============================================================
-// KANDIDATENPOSITIONEN
+// CANDIDATE POSITIONS
 // ============================================================
+
+function uniqueNumbers(values) {
+  const sorted = [...values].map(roundNum).sort((a, b) => a - b);
+  const unique = [];
+
+  sorted.forEach((value) => {
+    const exists = unique.some((u) => Math.abs(u - value) < EPS);
+
+    if (!exists) {
+      unique.push(value);
+    }
+  });
+
+  return unique;
+}
 
 function createCandidatePositions(placedItems, boxType) {
   const xs = [0];
@@ -362,6 +395,10 @@ function createCandidatePositions(placedItems, boxType) {
 
     zs.push(item.z);
     zs.push(item.z + item.height);
+
+    // zusätzliche Positionen an Kanten verbessern die Packdichte
+    xs.push(Math.max(0, item.x - 1));
+    ys.push(Math.max(0, item.y - 1));
   });
 
   const uniqueXs = uniqueNumbers(xs).filter((x) => x >= -EPS && x <= boxType.length + EPS);
@@ -379,76 +416,81 @@ function createCandidatePositions(placedItems, boxType) {
   }
 
   positions.sort((a, b) => {
-    // immer erst unten packen
+    // absolute Priorität: unten bleiben
     if (a.z !== b.z) return a.z - b.z;
 
-    // dann möglichst weit hinten/links geordnet
+    // dann möglichst hinten/links beginnen
     if (a.y !== b.y) return a.y - b.y;
     return a.x - b.x;
   });
 
-  return positions.slice(0, PACKING_RULES.maxCandidatePositions);
-}
-
-function uniqueNumbers(values) {
-  const sorted = [...values].sort((a, b) => a - b);
-  const unique = [];
-
-  sorted.forEach((value) => {
-    const exists = unique.some((u) => Math.abs(u - value) < EPS);
-
-    if (!exists) {
-      unique.push(value);
-    }
-  });
-
-  return unique;
+  return positions.slice(0, RULES.maxCandidatePositions);
 }
 
 // ============================================================
-// BEWERTUNG EINER POSITION
+// PLACEMENT SCORING
 // ============================================================
 
-function scorePlacement(positionedItem, usedBox, supportInfo) {
+function getUsedHeight(usedBox) {
+  if (usedBox.items.length === 0) {
+    return 0;
+  }
+
+  return Math.max(...usedBox.items.map((item) => item.z + item.height));
+}
+
+function getUsedVolumeInBox(usedBox) {
+  return usedBox.items.reduce((sum, item) => sum + getVolume(item), 0);
+}
+
+function getWeightInBox(usedBox) {
+  return usedBox.items.reduce((sum, item) => sum + item.weight, 0);
+}
+
+function scorePlacement(item, usedBox, support) {
   const box = usedBox.boxType;
 
-  const supportRatio = supportInfo ? supportInfo.supportRatio : 1;
+  const itemTop = item.z + item.height;
 
-  const bottomScore = positionedItem.z * 8;
-  const backScore = positionedItem.y * 1.2;
-  const leftScore = positionedItem.x * 1.2;
+  const bottomPenalty = item.z * 120;
+  const heightPenalty = itemTop * 20;
 
-  const heightPenalty = positionedItem.height * 0.5;
+  const supportPenalty = support ? (1 - support.supportRatio) * 2500 : 0;
 
-  const supportBonus = (1 - supportRatio) * 500;
+  const sideCompactness =
+    item.x * 4 +
+    item.y * 4;
 
-  const centerX = positionedItem.x + positionedItem.length / 2;
-  const centerY = positionedItem.y + positionedItem.width / 2;
+  const centerX = item.x + item.length / 2;
+  const centerY = item.y + item.width / 2;
 
   const centerPenalty =
-    Math.abs(centerX - box.length / 2) * 0.08 +
-    Math.abs(centerY - box.width / 2) * 0.08;
+    Math.abs(centerX - box.length / 2) * 0.25 +
+    Math.abs(centerY - box.width / 2) * 0.25;
+
+  const longThinStandingPenalty =
+    isForbiddenStandingOrientation(item, item) ? 100000 : 0;
 
   return (
-    bottomScore +
-    backScore +
-    leftScore +
+    bottomPenalty +
     heightPenalty +
-    supportBonus +
-    centerPenalty
+    supportPenalty +
+    sideCompactness +
+    centerPenalty +
+    longThinStandingPenalty
   );
 }
 
 function findBestPlacement(item, usedBox) {
-  const orientations = getStableOrientations(item);
   const positions = createCandidatePositions(usedBox.items, usedBox.boxType);
+  const orientations = getAllowedOrientations(item);
 
-  let bestPlacement = null;
+  let best = null;
   let bestScore = Infinity;
 
   for (const pos of positions) {
     for (const orientation of orientations) {
-      const positionedItem = {
+      const candidate = {
         ...item,
         length: orientation.length,
         width: orientation.width,
@@ -458,69 +500,49 @@ function findBestPlacement(item, usedBox) {
         z: pos.z
       };
 
-      const placementCheck = canPlaceItem(positionedItem, usedBox);
+      const check = checkPlacement(candidate, usedBox);
 
-      if (!placementCheck.ok) {
+      if (!check.ok) {
         continue;
       }
 
-      const score = scorePlacement(
-        positionedItem,
-        usedBox,
-        placementCheck.supportInfo
-      );
+      const score = scorePlacement(candidate, usedBox, check.support);
 
       if (score < bestScore) {
         bestScore = score;
-        bestPlacement = positionedItem;
+        best = candidate;
       }
     }
   }
 
-  return bestPlacement;
+  return best;
 }
 
 // ============================================================
-// BOX-LOGIK
+// BOX SELECTION
 // ============================================================
 
-function currentBoxWeight(usedBox) {
-  return usedBox.items.reduce((sum, item) => sum + item.weight, 0);
-}
-
-function canStartNewBox(item, boxType) {
-  if (item.weight > boxType.maxWeight) {
+function canItemFitInEmptyBox(item, boxType) {
+  if (item.weight > boxType.maxWeight + EPS) {
     return false;
   }
 
-  const orientations = getStableOrientations(item);
+  const orientations = getAllowedOrientations(item);
 
-  return orientations.some((orientation) => {
+  return orientations.some((o) => {
     return (
-      orientation.length <= boxType.length + EPS &&
-      orientation.width <= boxType.width + EPS &&
-      orientation.height <= boxType.height + EPS
+      o.length <= boxType.length + EPS &&
+      o.width <= boxType.width + EPS &&
+      o.height <= boxType.height + EPS
     );
   });
 }
 
-function createNewBoxWithItem(item, boxType, boxId) {
-  const emptyBox = {
-    boxId,
-    boxType,
-    items: []
-  };
-
-  const placedItem = findBestPlacement(item, emptyBox);
-
-  if (!placedItem) {
-    return null;
-  }
-
+function createEmptyUsedBox(boxType, boxId) {
   return {
     boxId,
     boxType,
-    items: [placedItem]
+    items: []
   };
 }
 
@@ -545,192 +567,342 @@ function calculateBoxStats(usedBox) {
 }
 
 // ============================================================
-// SORTIERSTRATEGIEN
+// PACKING STRATEGIES
 // ============================================================
 
-function getPackingOrders(items) {
-  const byVolumeHeavyStable = [...items].sort((a, b) => {
-    // nicht zerbrechlich zuerst
+function getItemStrategies(items) {
+  const strategies = [];
+
+  strategies.push([...items].sort((a, b) => {
+    // schwere, nicht fragile, große Teile zuerst
     if (a.fragile !== b.fragile) return a.fragile ? 1 : -1;
-
-    // schwere Artikel eher nach unten
     if (a.weight !== b.weight) return b.weight - a.weight;
-
-    // große Artikel zuerst
     return getVolume(b) - getVolume(a);
-  });
+  }));
 
-  const byVolume = [...items].sort((a, b) => {
-    return getVolume(b) - getVolume(a);
-  });
+  strategies.push([...items].sort((a, b) => getVolume(b) - getVolume(a)));
 
-  const byLargestSide = [...items].sort((a, b) => {
-    const maxA = Math.max(a.length, a.width, a.height);
-    const maxB = Math.max(b.length, b.width, b.height);
-
+  strategies.push([...items].sort((a, b) => {
+    const maxA = getMaxDim(a);
+    const maxB = getMaxDim(b);
     if (maxA !== maxB) return maxB - maxA;
-
     return getVolume(b) - getVolume(a);
-  });
+  }));
 
-  const byBaseArea = [...items].sort((a, b) => {
-    const baseA = Math.max(
-      a.length * a.width,
-      a.length * a.height,
-      a.width * a.height
-    );
-
-    const baseB = Math.max(
-      b.length * b.width,
-      b.length * b.height,
-      b.width * b.height
-    );
-
+  strategies.push([...items].sort((a, b) => {
+    const baseA = Math.max(a.length * a.width, a.length * a.height, a.width * a.height);
+    const baseB = Math.max(b.length * b.width, b.length * b.height, b.width * b.height);
     if (baseA !== baseB) return baseB - baseA;
-
     return getVolume(b) - getVolume(a);
-  });
+  }));
 
-  return [
-    byVolumeHeavyStable,
-    byVolume,
-    byLargestSide,
-    byBaseArea
-  ];
+  strategies.push([...items].sort((a, b) => {
+    // lange/schmale Teile früh, damit sie flach unten Platz bekommen
+    const thinA = isLongThinItem(a) ? 1 : 0;
+    const thinB = isLongThinItem(b) ? 1 : 0;
+    if (thinA !== thinB) return thinB - thinA;
+    return getVolume(b) - getVolume(a);
+  }));
+
+  strategies.push([...items].sort((a, b) => {
+    // nicht stapelbare Teile eher nach oben/später
+    if (a.stackable !== b.stackable) return a.stackable ? -1 : 1;
+    return getVolume(b) - getVolume(a);
+  }));
+
+  return strategies.slice(0, RULES.maxStrategies);
 }
 
 // ============================================================
-// EINE PACKUNG BERECHNEN
+// CORE PACKING INTO FIXED BOX LIST
 // ============================================================
 
-function packWithOrder(items, boxes) {
-  const sortedBoxes = [...boxes].sort((a, b) => {
-    return getVolume(a) - getVolume(b);
-  });
-
-  const usedBoxes = [];
+function tryPackItemsIntoGivenBoxes(items, usedBoxes) {
   const unpackedItems = [];
-  let globalPackStep = 1;
+  let step = 1;
 
-  items.forEach((item) => {
+  for (const item of items) {
     let placed = false;
 
-    // Erst versuchen, in bestehende Boxen zu packen.
-    // Boxen mit weniger Restvolumen werden zuerst getestet.
-    const usedBoxesSorted = [...usedBoxes].sort((a, b) => {
-      const freeA = getVolume(a.boxType) - a.items.reduce((sum, i) => sum + getVolume(i), 0);
-      const freeB = getVolume(b.boxType) - b.items.reduce((sum, i) => sum + getVolume(i), 0);
+    // Beste Box unter allen vorhandenen Boxen suchen.
+    let bestBox = null;
+    let bestPlacedItem = null;
+    let bestScore = Infinity;
 
-      return freeA - freeB;
-    });
-
-    for (const usedBox of usedBoxesSorted) {
+    for (const usedBox of usedBoxes) {
       const weightFit =
-        currentBoxWeight(usedBox) + item.weight <= usedBox.boxType.maxWeight + EPS;
+        getWeightInBox(usedBox) + item.weight <= usedBox.boxType.maxWeight + EPS;
 
       if (!weightFit) {
         continue;
       }
 
-      const placedItem = findBestPlacement(item, usedBox);
+      const placedCandidate = findBestPlacement(item, usedBox);
 
-      if (placedItem) {
-        usedBox.items.push({
-          ...placedItem,
-          packStep: globalPackStep
-        });
+      if (!placedCandidate) {
+        continue;
+      }
 
-        globalPackStep++;
-        placed = true;
-        break;
+      const simulatedBox = {
+        ...usedBox,
+        items: [...usedBox.items, placedCandidate]
+      };
+
+      const score =
+        getUsedHeight(simulatedBox) * 120 +
+        (getVolume(simulatedBox.boxType) - getUsedVolumeInBox(simulatedBox)) * 0.002 +
+        placedCandidate.z * 300;
+
+      if (score < bestScore) {
+        bestScore = score;
+        bestBox = usedBox;
+        bestPlacedItem = placedCandidate;
       }
     }
 
-    if (placed) {
-      return;
+    if (bestBox && bestPlacedItem) {
+      bestBox.items.push({
+        ...bestPlacedItem,
+        packStep: step++
+      });
+
+      placed = true;
     }
 
-    // Wenn keine vorhandene Box passt, neue möglichst kleine Box öffnen.
-    const matchingBox = sortedBoxes.find((boxType) => {
-      return canStartNewBox(item, boxType);
-    });
-
-    if (!matchingBox) {
+    if (!placed) {
       unpackedItems.push({
         ...item,
-        failReason: "Passt in keine verfügbare Box oder überschreitet Gewicht."
+        failReason: "Keine stabile Position in den ausgewählten Boxen gefunden."
       });
-      return;
     }
-
-    const newBox = createNewBoxWithItem(
-      item,
-      matchingBox,
-      usedBoxes.length + 1
-    );
-
-    if (!newBox) {
-      unpackedItems.push({
-        ...item,
-        failReason: "Keine stabile Position gefunden."
-      });
-      return;
-    }
-
-    newBox.items = newBox.items.map((placedItem) => {
-      return {
-        ...placedItem,
-        packStep: globalPackStep
-      };
-    });
-
-    globalPackStep++;
-
-    usedBoxes.push(newBox);
-  });
-
-  const calculatedBoxes = usedBoxes.map(calculateBoxStats);
+  }
 
   return {
-    usedBoxes: calculatedBoxes,
+    usedBoxes: usedBoxes.filter((box) => box.items.length > 0),
     unpackedItems
   };
 }
 
 // ============================================================
-// LÖSUNG BEWERTEN
+// TRY ONE BOX TYPE FIRST
+// ============================================================
+
+function tryPackAllIntoOneBoxType(items, boxType, strategy) {
+  const totalWeight = items.reduce((sum, item) => sum + item.weight, 0);
+
+  if (totalWeight > boxType.maxWeight + EPS) {
+    return null;
+  }
+
+  const totalVolume = items.reduce((sum, item) => sum + getVolume(item), 0);
+
+  if (totalVolume > getVolume(boxType) + EPS) {
+    return null;
+  }
+
+  const everyItemCanFit = items.every((item) => canItemFitInEmptyBox(item, boxType));
+
+  if (!everyItemCanFit) {
+    return null;
+  }
+
+  const usedBoxes = [createEmptyUsedBox(boxType, 1)];
+
+  const result = tryPackItemsIntoGivenBoxes(strategy, usedBoxes);
+
+  if (result.unpackedItems.length > 0) {
+    return null;
+  }
+
+  return result;
+}
+
+// ============================================================
+// GREEDY MULTI BOX PACKING
+// ============================================================
+
+function packGreedyWithBoxPreference(items, boxes, strategy) {
+  const sortedBoxesSmallToLarge = [...boxes].sort((a, b) => getVolume(a) - getVolume(b));
+  const sortedBoxesLargeToSmall = [...boxes].sort((a, b) => getVolume(b) - getVolume(a));
+
+  // Sehr wichtig:
+  // Wir öffnen neue Boxen nicht immer klein.
+  // Wenn die restlichen Artikel zusammen wahrscheinlich in eine große Box passen,
+  // nehmen wir lieber eine große Box als mehrere kleine.
+  const usedBoxes = [];
+  const unpackedItems = [];
+  let step = 1;
+
+  for (const item of strategy) {
+    let placed = false;
+
+    let bestExistingBox = null;
+    let bestExistingPlacement = null;
+    let bestExistingScore = Infinity;
+
+    for (const usedBox of usedBoxes) {
+      const weightFit =
+        getWeightInBox(usedBox) + item.weight <= usedBox.boxType.maxWeight + EPS;
+
+      if (!weightFit) {
+        continue;
+      }
+
+      const placedCandidate = findBestPlacement(item, usedBox);
+
+      if (!placedCandidate) {
+        continue;
+      }
+
+      const score =
+        placedCandidate.z * 1000 +
+        getUsedHeight({
+          ...usedBox,
+          items: [...usedBox.items, placedCandidate]
+        }) * 70 +
+        usedBoxes.length * 10000;
+
+      if (score < bestExistingScore) {
+        bestExistingScore = score;
+        bestExistingBox = usedBox;
+        bestExistingPlacement = placedCandidate;
+      }
+    }
+
+    if (bestExistingBox && bestExistingPlacement) {
+      bestExistingBox.items.push({
+        ...bestExistingPlacement,
+        packStep: step++
+      });
+
+      placed = true;
+    }
+
+    if (placed) {
+      continue;
+    }
+
+    // Neue Box wählen:
+    // Nicht automatisch kleinste, sondern beste Balance.
+    let bestNewBoxType = null;
+    let bestNewBoxScore = Infinity;
+
+    for (const boxType of sortedBoxesSmallToLarge) {
+      if (!canItemFitInEmptyBox(item, boxType)) {
+        continue;
+      }
+
+      const candidateBox = createEmptyUsedBox(boxType, usedBoxes.length + 1);
+      const placedCandidate = findBestPlacement(item, candidateBox);
+
+      if (!placedCandidate) {
+        continue;
+      }
+
+      const volumeWaste = getVolume(boxType) - getVolume(item);
+
+      const score =
+        volumeWaste * 0.001 +
+        getVolume(boxType) * 0.0001;
+
+      if (score < bestNewBoxScore) {
+        bestNewBoxScore = score;
+        bestNewBoxType = boxType;
+      }
+    }
+
+    // Wenn schon mehrere kleine Boxen drohen, große Box bevorzugen.
+    if (!bestNewBoxType && sortedBoxesLargeToSmall.length > 0) {
+      bestNewBoxType = sortedBoxesLargeToSmall.find((boxType) => {
+        return canItemFitInEmptyBox(item, boxType);
+      });
+    }
+
+    if (!bestNewBoxType) {
+      unpackedItems.push({
+        ...item,
+        failReason: "Passt in keine verfügbare Box."
+      });
+      continue;
+    }
+
+    const newBox = createEmptyUsedBox(bestNewBoxType, usedBoxes.length + 1);
+    const placedCandidate = findBestPlacement(item, newBox);
+
+    if (!placedCandidate) {
+      unpackedItems.push({
+        ...item,
+        failReason: "Keine stabile Startposition gefunden."
+      });
+      continue;
+    }
+
+    newBox.items.push({
+      ...placedCandidate,
+      packStep: step++
+    });
+
+    usedBoxes.push(newBox);
+  }
+
+  return {
+    usedBoxes,
+    unpackedItems
+  };
+}
+
+// ============================================================
+// SOLUTION EVALUATION
 // ============================================================
 
 function evaluateSolution(solution) {
-  const boxCountPenalty = solution.usedBoxes.length * 100000;
-  const unpackedPenalty = solution.unpackedItems.length * 1000000;
+  const usedBoxes = solution.usedBoxes || [];
+  const unpackedItems = solution.unpackedItems || [];
 
-  const freeVolumePenalty = solution.usedBoxes.reduce((sum, usedBox) => {
-    return sum + usedBox.freeVolumePercent * 100;
+  const boxCountPenalty = usedBoxes.length * 10000000;
+  const unpackedPenalty = unpackedItems.length * 100000000;
+
+  const totalBoxVolume = usedBoxes.reduce((sum, box) => {
+    return sum + getVolume(box.boxType);
   }, 0);
 
-  const heightPenalty = solution.usedBoxes.reduce((sum, usedBox) => {
-    const maxHeight = usedBox.items.reduce((max, item) => {
-      return Math.max(max, item.z + item.height);
-    }, 0);
-
-    return sum + maxHeight * 12;
+  const totalUsedVolume = usedBoxes.reduce((sum, box) => {
+    return sum + getUsedVolumeInBox(box);
   }, 0);
 
-  const stabilityPenalty = solution.usedBoxes.reduce((sum, usedBox) => {
+  const volumeWastePenalty = (totalBoxVolume - totalUsedVolume) * 0.4;
+
+  const heightPenalty = usedBoxes.reduce((sum, box) => {
+    return sum + getUsedHeight(box) * 250;
+  }, 0);
+
+  const stabilityPenalty = usedBoxes.reduce((sum, box) => {
     let penalty = 0;
 
-    usedBox.items.forEach((item) => {
+    box.items.forEach((item) => {
       if (item.z <= EPS) {
         return;
       }
 
-      const support = calculateSupport(item, usedBox.items.filter((i) => i !== item));
+      const others = box.items.filter((i) => i !== item);
+      const support = calculateSupport(item, others);
 
       if (!support.supported) {
-        penalty += 50000;
+        penalty += 1000000;
       } else {
-        penalty += (1 - support.supportRatio) * 1000;
+        penalty += (1 - support.supportRatio) * 6000;
+      }
+    });
+
+    return sum + penalty;
+  }, 0);
+
+  const standingPenalty = usedBoxes.reduce((sum, box) => {
+    let penalty = 0;
+
+    box.items.forEach((item) => {
+      if (isForbiddenStandingOrientation(item, item)) {
+        penalty += 5000000;
       }
     });
 
@@ -740,14 +912,46 @@ function evaluateSolution(solution) {
   return (
     unpackedPenalty +
     boxCountPenalty +
-    freeVolumePenalty +
+    standingPenalty +
+    stabilityPenalty +
     heightPenalty +
-    stabilityPenalty
+    volumeWastePenalty
   );
 }
 
+function normalizePackSteps(solution) {
+  let step = 1;
+
+  solution.usedBoxes.forEach((box, boxIndex) => {
+    box.boxId = boxIndex + 1;
+
+    box.items.sort((a, b) => {
+      if (a.z !== b.z) return a.z - b.z;
+      if (a.y !== b.y) return a.y - b.y;
+      return a.x - b.x;
+    });
+
+    box.items = box.items.map((item) => {
+      return {
+        ...item,
+        packStep: step++
+      };
+    });
+  });
+
+  return solution;
+}
+
+function addStats(solution) {
+  return {
+    usedBoxes: solution.usedBoxes.map(calculateBoxStats),
+    unpackedItems: solution.unpackedItems,
+    algorithmVersion: ALGORITHM_VERSION
+  };
+}
+
 // ============================================================
-// HAUPTFUNKTION FÜR DIE WEBSITE
+// MAIN FUNCTION FOR WEBSITE
 // ============================================================
 
 function runPackingAlgorithm(articles, boxes) {
@@ -756,47 +960,67 @@ function runPackingAlgorithm(articles, boxes) {
   if (items.length === 0 || boxes.length === 0) {
     return {
       usedBoxes: [],
-      unpackedItems: items
+      unpackedItems: items,
+      algorithmVersion: ALGORITHM_VERSION
     };
   }
 
-  const packingOrders = getPackingOrders(items);
+  const sortedBoxesSmallToLarge = [...boxes].sort((a, b) => getVolume(a) - getVolume(b));
+  const sortedBoxesLargeToSmall = [...boxes].sort((a, b) => getVolume(b) - getVolume(a));
 
-  const solutions = packingOrders.map((order) => {
-    return packWithOrder(order, boxes);
+  const strategies = getItemStrategies(items);
+  const candidateSolutions = [];
+
+  // ==========================================================
+  // 1. Erst versuchen: ALLES IN EINE EINZIGE BOX
+  //    Und zwar nicht nur kleinste, sondern jede Box testen.
+  // ==========================================================
+
+  for (const boxType of sortedBoxesSmallToLarge) {
+    for (const strategy of strategies) {
+      const oneBoxSolution = tryPackAllIntoOneBoxType(items, boxType, strategy);
+
+      if (oneBoxSolution) {
+        candidateSolutions.push(oneBoxSolution);
+      }
+    }
+  }
+
+  // ==========================================================
+  // 2. Falls eine Ein-Box-Lösung existiert:
+  //    Immer beste Ein-Box-Lösung nehmen.
+  //    Eine große Box ist besser als zwei kleine.
+  // ==========================================================
+
+  const oneBoxSolutions = candidateSolutions.filter((solution) => {
+    return solution.usedBoxes.length === 1 && solution.unpackedItems.length === 0;
   });
 
-  solutions.sort((a, b) => {
-    return evaluateSolution(a) - evaluateSolution(b);
-  });
+  if (oneBoxSolutions.length > 0) {
+    oneBoxSolutions.sort((a, b) => evaluateSolution(a) - evaluateSolution(b));
 
-  const bestSolution = solutions[0];
+    const bestOneBox = normalizePackSteps(oneBoxSolutions[0]);
+    return addStats(bestOneBox);
+  }
 
-  // Packsteps innerhalb der gewählten Lösung sauber neu durchnummerieren.
-  let step = 1;
+  // ==========================================================
+  // 3. Wenn nicht alles in eine Box geht:
+  //    mehrere Strategien mit Multi-Box testen.
+  // ==========================================================
 
-  bestSolution.usedBoxes.forEach((usedBox) => {
-    usedBox.items.sort((a, b) => {
-      if (a.z !== b.z) return a.z - b.z;
-      if (a.y !== b.y) return a.y - b.y;
-      return a.x - b.x;
-    });
+  for (const strategy of strategies) {
+    const greedySolution = packGreedyWithBoxPreference(items, sortedBoxesSmallToLarge, strategy);
+    candidateSolutions.push(greedySolution);
+  }
 
-    usedBox.items = usedBox.items.map((item) => {
-      return {
-        ...item,
-        packStep: step++
-      };
-    });
-  });
+  // Extra: große Boxen bevorzugen, falls dadurch weniger Boxen entstehen.
+  for (const strategy of strategies) {
+    const greedyLargePreference = packGreedyWithBoxPreference(items, sortedBoxesLargeToSmall, strategy);
+    candidateSolutions.push(greedyLargePreference);
+  }
 
-  const recalculated = {
-    usedBoxes: bestSolution.usedBoxes.map(calculateBoxStats),
-    unpackedItems: bestSolution.unpackedItems
-  };
+  candidateSolutions.sort((a, b) => evaluateSolution(a) - evaluateSolution(b));
 
- return {
-  ...recalculated,
-  algorithmVersion: ALGORITHM_VERSION
-};
+  const best = normalizePackSteps(candidateSolutions[0]);
+  return addStats(best);
 }
